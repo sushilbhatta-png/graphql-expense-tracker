@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Expense Tracker - GraphQL</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <script src="./assets/script.js" defer></script>
+</head>
+<body>
+
+    <h1>Add New Expense</h1>
+
+    <form id="expenseForm">
+
+        <div>
+            <label for="title">Expense Title:</label>
+            <input type="text" id="title" required>
+        </div>
+
+        <br>
+
+        <div>
+            <label for="amount">Amount:</label>
+            <input type="number" id="amount" step="0.01" min="0.01" required>
+        </div>
+
+        <br>
+
+        <div>
+            <label for="category">Category:</label>
+
+            <select id="category" required>
+                <option value="FOOD">Food</option>
+                <option value="TRANSPORT">Transport</option>
+                <option value="SHOPPING">Shopping</option>
+                <option value="OTHER">Other</option>
+            </select>
+        </div>
+
+        <br>
+
+        <button type="submit">Add Expense</button>
+
+    </form>
+
+    <h2>Response</h2>
+
+    <div id="result"></div>
+
+    <section id="expenseListSection">
+        <h2>All Expenses</h2>
+
+        <div id="expenseList"></div>
+</section>
+
+</body>
+</html>
