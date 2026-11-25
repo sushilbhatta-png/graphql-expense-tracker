@@ -6,11 +6,9 @@
     <script src="./assets/script.js" defer></script>
 </head>
 <body>
-
+    <!-- New Expense Form  -->
     <h1>Add New Expense</h1>
-
     <form id="expenseForm">
-
         <div>
             <label for="title">Expense Title:</label>
             <input type="text" id="title" required>
@@ -42,15 +40,50 @@
 
     </form>
 
+    <!-- New Expense Result -->
     <h2>Response</h2>
-
     <div id="result"></div>
 
-    <section id="expenseListSection">
+    <!-- Expense Update Form -->
+    <h2>Update Expense (Testing)</h2>
+    <form id="updateExpenseForm">
+        <label for="updateId">Expense ID</label>
+        <input type="number" id="updateId" required>
+
+        <label for="updateTitle">New Title</label>
+        <input type="text" id="updateTitle" required>
+
+        <label for="updateAmount">New Amount</label>
+        <input type="number" step="0.01" id="updateAmount" required>
+
+        <label for="updateCategory">New Category</label>
+        <select id="updateCategory" required>
+            <option value="FOOD">Food</option>
+            <option value="TRANSPORT">Transport</option>
+            <option value="SHOPPING">Shopping</option>
+            <option value="OTHER">Other</option>
+        </select>
+
+        <button type="submit">Update Expense</button>
+    </form>
+
+    <!-- Updated Results -->
+    <div id="updateResult"></div>
+
+    <!-- Expense Dropdown -->
+     <label for="categoryFilter">Filter by category:</label>
+        <select id="categoryFilter">
+            <option value="">All categories</option>
+            <option value="FOOD">Food</option>
+            <option value="TRANSPORT">Transport</option>
+            <option value="SHOPPING">Shopping</option>
+            <option value="OTHER">Other</option>
+        </select>
+
+    <!-- All Expenses -->
+    <div id="expenseListSection">
         <h2>All Expenses</h2>
-
         <div id="expenseList"></div>
-</section>
-
+    </div>
 </body>
 </html>

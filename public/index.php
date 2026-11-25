@@ -1,248 +1,338 @@
+
 <?php
 
+// ============================================
+// 1. PHP CONFIGURATION & DEPENDENCIES
+// ============================================
+
+// Temporary debugging settings
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-//__DIR__ return the current directory of  PHP file.(/public)
-require_once __DIR__ . '/../vendor/autoload.php';  
+// Composer
+require_once __DIR__ . '/../vendor/autoload.php';
+
+// Database connection
 require_once __DIR__ . '/../config/database.php';
-use GraphQL\Type\Definition\ObjectType;
+
+// GraphQL imports
 use GraphQL\Type\Definition\Type;
-use GraphQL\Type\Schema;
-use GraphQL\Type\Definition\InputObjectType;
+use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\EnumType;
+use GraphQL\Type\Definition\InputObjectType;
+use GraphQL\Type\Schema;
 use GraphQL\GraphQL;
 
-//autoloader lets pgp load classes from installed composer packages without manually including each class file.
 
-// Sample Expenses Data 
-$sampleExpenses = [
-    [
-        'id' => 1,
-        'title' => 'Lunch',
-        'amount' => 15.50,
-        'category' => 'Food',
-    ],
-    [
-        'id' => 2,
-        'title' => 'Bus fare',
-        'amount' => 3.50,
-        'category' => 'Transport',
-    ],
-    [
-        'id' => 3,
-        'title' => 'Groceries',
-        'amount' => 45.75,
-        'category' => 'Food',
-    ],
-];
+// ============================================
+// 2. HISTORICAL REFERENCE: SAMPLE DATA
+// ============================================
 
-// ObjectType defines the structure of an object (eg. an Expense);
+/*
+HISTORICAL CODE:
+
+We initially used a PHP array to store expenses instead of
+a database. This helped us understand GraphQL resolvers,
+queries, mutations and how data was returned.
+
+We eventually replaced this approach with MySQL and PDO
+so data would persist after requests.
+
+KEEP YOUR ORIGINAL $sampleExpenses ARRAY HERE.
+*/
+
+// $sampleExpenses = [...your original array...];
+
+
+// ============================================
+// 3. GRAPHQL OUTPUT TYPE: EXPENSE
+// ============================================
+
+// Defines the structure of an Expense object returned
+// by GraphQL to the client.
+
 $expenseType = new ObjectType([
-        'name' => 'Expense',
-        // fields Define the property avaliable on that Object
-        'fields' => [
-            'id' => Type::int(),
-            'title' => Type::string(),
-            'amount' => Type::float(),
-            'category'=>Type::string(),
-        ]
-    ]
-);
+    'name' => 'Expense',
+    'fields' => [
+        'id' => Type::int(),
+        'title' => Type::string(),
+        'amount' => Type::float(),
+        'category' => Type::string(),
+    ],
+]);
 
+$userType =new ObjectType([
+    'name'=> 'User',
+    'fields' => [
+        'id' => Type::int(),
+        'name' => Type::string(),
+    ],
+]);
+
+
+
+// ============================================
+// 4. GRAPHQL ENUM: EXPENSE CATEGORY
+// ============================================
+
+// GraphQL enum values map to PHP/database values.
 
 $categoryType = new EnumType([
     'name' => 'ExpenseCategory',
-    'values'=>[
-        'FOOD'=>'food',
+    'values' => [
+        'FOOD' => 'food',
         'TRANSPORT' => 'Transport',
         'SHOPPING' => 'Shopping',
-        'OTHER' => 'Other'
+        'OTHER' => 'Other',
     ],
 ]);
 
-//
+
+// ============================================
+// 5. GRAPHQL QUERY: EXPENSES
+// ============================================
+
+// Query retrieves expenses from the database.
+// Optional category argument allows filtering.
+
 $queryType = new ObjectType([
     'name' => 'Query',
-    'fields'=> [
-        'expenses'=> [
-            'type'=> Type::listOf($expenseType),
-            'args' =>[
-                //'category'=> Type::string(),
-                // For Additional Configuration on category like defaultValue use assoc. array
-                // 'category'=> [
-                //     'type' => Type::string(),
-                //     'defaultValue' => 'Food',
-                // ],
-                'category'=>[
-                    'type'=>$categoryType,
-                    // 'defaultValue' => 'food',  //Always use the food category 
-                ],
+    'fields' => [
+        'expenses' => [
+            'type' => Type::listOf($expenseType),
+            'args' => [
+                'category' => $categoryType,
             ],
+            'resolve' => function($rootValue, array $args) use ($pdo) {
 
-            'resolve' => function($rootValue, array $args) use ($pdo){
-                if(array_key_exists('category',$args)){
-                    // Compare the expense category with the category received from $args(ie as per client's request)
-                    
-                    // Prepare a SQL Statement  with placeholder
-                    $stmt = $pdo-> prepare(' select * from expenses where category= :category');
-                    
-                    // Execute the statement and pass the actual category passed from client 
+                // Filter directly in SQL when category is supplied.
+                // if (array_key_exists('category', $args)) {
+                if (!empty($args['category'])){
+
+                    $stmt = $pdo->prepare(
+                        'SELECT * FROM expenses WHERE category = :category'
+                    );
+
                     $stmt->execute([
-                        'category' => $args['category']
+                        'category' => $args['category'],
                     ]);
 
-                    $filtered_expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-                    $result = array_filter($filtered_expenses,function ($expense) use($args) {
-                       $required_value = $args['category'];
-                       return strcasecmp($required_value,$expense['category'])===0;   
-                    });
-
-                    $result = array_values($result);
-                    return $result;
-
-                }else{
-                    // Query all Expenses from the database.
-                    $stmt = $pdo -> query('select * from expenses');
-                    $stmt-> execute();
-                    $all_expenses = $stmt -> fetchAll(PDO::FETCH_ASSOC);
-                    return array_values($all_expenses);
-
-
+                    return $stmt->fetchAll(PDO::FETCH_ASSOC);
                 }
-            }
+
+                // Otherwise retrieve all expenses.
+                $stmt = $pdo->query('SELECT * FROM expenses');
+
+                return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            },
         ],
+        'user'=>[
+            'type'=>$userType,
+            'resolve'=>function($rootValue, array $args){
+                
+            }
+        ]
     ],
 ]);
 
-// InputType Defines the structured input (eg create a new expense by client);
+
+// ============================================
+// 6. GRAPHQL INPUT TYPE: EXPENSE INPUT
+// ============================================
+
+// Used when the client sends expense data to GraphQL.
+
 $expenseInputType = new InputObjectType([
-    'name'=> 'ExpenseInput',
+    'name' => 'ExpenseInput',
     'fields' => [
         'title' => Type::string(),
         'amount' => Type::float(),
-        'category'=> $categoryType,
+        'category' => $categoryType,
     ],
 ]);
 
+
+// ============================================
+// 7. GRAPHQL MUTATIONS
+// ============================================
+
+// Mutations modify data in the database.
+
 $mutationType = new ObjectType([
     'name' => 'Mutation',
-    'fields' =>[
-        'createExpense'=>[
-             'type' => $expenseType,
-             'args'=> [
+    'fields' => [
+
+        // ----------------------------------------
+        // CREATE EXPENSE
+        // ----------------------------------------
+
+        'createExpense' => [
+            'type' => $expenseType,
+            'args' => [
                 'input' => Type::nonNull($expenseInputType),
-             ],
-             'resolve' => function($rootValue,array $args) use(&$sampleExpenses){
-                // Create a new Expense
-                // Retrive inner array
+            ],
+            'resolve' => function($rootValue, array $args) use ($pdo) {
+
                 $input = $args['input'];
 
-                $title =$input['title'];
+                $title = $input['title'];
                 $amount = $input['amount'];
                 $category = $input['category'];
 
-                // Create a new id 
-                $newId = count($sampleExpenses) + 1;
+                $query = 'INSERT INTO expenses (title, amount, category)
+                          VALUES (:title, :amount, :category)';
 
-                $newExpense = array(
-                    'id' => $newId,
-                    'title'=> $title,
+                $stmt = $pdo->prepare($query);
+
+                $stmt->execute([
+                    'title' => $title,
                     'amount' => $amount,
-                    'category'=> $category,
+                    'category' => $category,
+                ]);
+
+                $newId = $pdo->lastInsertId();
+
+                return [
+                    'id' => (int) $newId,
+                    'title' => $title,
+                    'amount' => $amount,
+                    'category' => $category,
+                ];
+            },
+        ],
+
+        // ----------------------------------------
+        // UPDATE EXPENSE
+        // ----------------------------------------
+
+        'updateExpense' => [
+            'type' => $expenseType,
+            'args' => [
+                'id' => Type::nonNull(Type::int()),
+                'input' => Type::nonNull($expenseInputType),
+            ],
+            'resolve' => function($rootValue, array $args) use ($pdo) {
+
+                $input = $args['input'];
+
+                $title = $input['title'];
+                $amount = $input['amount'];
+                $category = $input['category'];
+                $id = $args['id'];
+
+                $stmt = $pdo->prepare(
+                    'UPDATE expenses
+                     SET title = :title,
+                         amount = :amount,
+                         category = :category
+                     WHERE id = :id'
                 );
-                $sampleExpenses[] = $newExpense;
-                // Return the newly created expense to GraphQL
-                return $newExpense;
-             },
+
+               $stmt->execute([
+                    'id'=>$id,
+                    'title'=>$title,
+                    'amount' => $amount,
+                    'category' => $category,
+                ]);
+
+                if($stmt->rowCount()===0){
+                    throw new Exception("Could not find id");   
+                }
+                    return [
+                        'id'=>$id,
+                        'title'=>$title,
+                        'amount' => $amount,
+                        'category' => $category,
+                    ];      
+            },
+        ],
+
+        // ----------------------------------------
+        // UPDATE EXPENSE
+        // ----------------------------------------
+        'deleteExpense' => [
+            'type'=>$expenseType,
+            'args'=>[
+                'id'=>Type::nonNull(Type::INT()),
+            ],
+            'resolve'=>function($rootValue,array $args) use($pdo){
+                // Prepare SQL Query
+
+                $id = $args['id'];
+                
+                $stmt = $pdo->prepare('delete from expenses where id= :id');
+                
+                // execute SQL Query
+                $stmt->execute([
+                    'id'=> $id
+                ]);
+
+                return [
+                    'id'=> $id
+                ];
+                
+            },
         ],
     ],
 ]);
 
 
+// ============================================
+// 8. GRAPHQL SCHEMA
+// ============================================
 
-$schema = new Schema([ //Create a graphql schema Object
-// $queryType is the ObjectType Assigned to that role
-    'query'=> $queryType, //'query' identifies the root type for read operations
-    'mutation' => $mutationType, // mutation is the entry point for Write operation
+// Schema connects the Query and Mutation root types.
+
+$schema = new Schema([
+    'query' => $queryType,
+    'mutation' => $mutationType,
 ]);
 
-$query= '
-    query {
-        expenses(category:FOOD) {
-        id    
-        title
-        amount
-        category
-        }
-    }
-';
-//For future Ref
-$mutation_without_variable = '
-    mutation {
-        createExpense(input: {
-            title: "Coffee",
-            amount: 4.50,
-            category: FOOD
-        }) {
-            id
-            title
-            amount
-            category
-        }
-    }
-';
+
+// ============================================
+// 9. HISTORICAL REFERENCE: TEST CASES
+// ============================================
+
+/*
+KEEP YOUR PREVIOUS TEST CASES HERE.
+
+Examples of historical tests:
+
+- Initial GraphQL query using sample data.
+- Query retrieving all expenses.
+- Query filtering expenses by category.
+- Initial mutation using in-memory array.
+- Mutation using GraphQL variables.
+- createExpense database insert test.
+- updateExpense test attempts.
+- Any errors encountered and their solutions.
+
+Keep these commented out so they don't run as part
+of the actual endpoint.
+
+These are your learning notes and debugging history.
+*/
 
 
-// Using the Variable
+// ============================================
+// 10. HTTP REQUEST HANDLING
+// ============================================
 
-// `input` is the argument name. It must match the argument
-// name defined in the PHP schema:
-// 'input' => Type::nonNull($expenseInputType)
+// Read the request body sent by the frontend.
 
-// `$input` is the GraphQL variable that will receive the
-// value supplied separately when executing the mutation.
-$mutation = '
-    mutation CreateExpense($input: ExpenseInput!) {
-        createExpense(input: $input) {
-            id
-            title
-            amount
-            category
-        }
-    }
-';
+$request = json_decode(file_get_contents('php://input'), true);
 
-$variableValues = [
-    'input' =>[
-    'title' => 'Coffee',
-    'amount' => 4.50,
-    'category' => 'FOOD'
-    ],
-];
-
-// Signature
-// GraphQL::executeQuery($schema, $source, $rootValue, $variableValues);
-
-// $result = GraphQL::executeQuery(
-//     $schema,
-//     $mutation,
-//     null,
-//     null,
-//     $variableValues
-// );
-// $request = json_decode(file_get_contents('php://input'), true);
-
-// var_dump($request);
-
-// Actual client Server Implementation
-
-// json_decode converts it into an associative array
-$request = json_decode(file_get_contents('php://input'),true);
+// Extract GraphQL query.
 $mutation = $request['query'];
-$variableValues = $request['variables']??[];
+
+// Extract GraphQL variables, if supplied.
+$variableValues = $request['variables'] ?? [];
+
+
+// ============================================
+// 11. EXECUTE GRAPHQL REQUEST & RESPONSE
+// ============================================
 
 $result = GraphQL::executeQuery(
     $schema,
@@ -251,44 +341,12 @@ $result = GraphQL::executeQuery(
     null,
     $variableValues
 );
-// converts the PHP array back into JSON.
+
+// Convert the execution result to an array.
 $output = $result->toArray();
-// tells the client the response is JSON.
-header('Content-Type: application/json'); //tells client php return the json data
-// echo sends the JSON response to the client.
+
+// Set the response type.
+header('Content-Type: application/json');
+
+// Return JSON to the frontend.
 echo json_encode($output);
-
-
-
-
-/*
-Schema acts as the entry point to your API. it tells graphql what the client is allowed to ask for. 
-
-
-Graphql needs a starting point for that request. That starting point is called the Root Query( or Query Type).
-
-Query is a special object type that defines the available read operation.
-eg we want our API to allow a client to fetch a single expense.
-
-{
-    expense
-    {
-        id
-        title
-        amount
-    }
-}
-This is how the client Use
-mutation {
-    createExpense(input: {
-        title: "Lunch",
-        amount: 15.50,
-        category: FOOD
-    }) {
-        id
-        title
-        category
-    }
-}
-*/
-
