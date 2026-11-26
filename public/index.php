@@ -49,6 +49,16 @@ KEEP YOUR ORIGINAL $sampleExpenses ARRAY HERE.
 // 3. GRAPHQL OUTPUT TYPE: EXPENSE
 // ============================================
 
+
+$userType =new ObjectType([
+    'name'=> 'User',
+    'fields' => [
+        'id' => Type::int(),
+        'name' => Type::string(),
+    ],
+]);
+
+
 // Defines the structure of an Expense object returned
 // by GraphQL to the client.
 
@@ -59,14 +69,22 @@ $expenseType = new ObjectType([
         'title' => Type::string(),
         'amount' => Type::float(),
         'category' => Type::string(),
-    ],
-]);
+        // 'user'=>[
+        //         'type'=>$userType,
+        //         'resolve'=>function($rootValue, array $args) use($pdo){
+        //             $userId = $rootValue['user_id'];
+                    
+        //             $stmt = $pdo->prepare('select * from users where id= :id');
 
-$userType =new ObjectType([
-    'name'=> 'User',
-    'fields' => [
-        'id' => Type::int(),
-        'name' => Type::string(),
+        //             $stmt->execute([
+        //                 'id' => $userId
+        //             ]);
+        //             return $stmt->fetch(PDO::FETCH_ASSOC);
+        //         }
+        //     ]
+        'user'=> [
+            'type' => $userType
+        ]
     ],
 ]);
 
@@ -105,34 +123,65 @@ $queryType = new ObjectType([
                 'category' => $categoryType,
             ],
             'resolve' => function($rootValue, array $args) use ($pdo) {
+                                    // Using Join to solve N+1 problem
+
+            $sql = '
+                SELECT
+                    expenses.id,
+                    expenses.title,
+                    expenses.amount,
+                    expenses.category,
+                    users.id AS user_id,
+                    users.name AS user_name
+                FROM expenses
+                LEFT JOIN users
+                    ON expenses.user_id = users.id
+            ';
 
                 // Filter directly in SQL when category is supplied.
                 // if (array_key_exists('category', $args)) {
                 if (!empty($args['category'])){
+                    $sql .= " WHERE expenses.category= :category";
 
-                    $stmt = $pdo->prepare(
-                        'SELECT * FROM expenses WHERE category = :category'
-                    );
+                    // $stmt = $pdo->prepare(
+                    //     'SELECT * FROM expenses WHERE category = :category'
+                    // );
+
+                    $stmt = $pdo->prepare($sql);
 
                     $stmt->execute([
                         'category' => $args['category'],
                     ]);
 
                     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+                }else{
+                    $stmt = $pdo -> query($sql);
                 }
 
                 // Otherwise retrieve all expenses.
-                $stmt = $pdo->query('SELECT * FROM expenses');
+                // $stmt = $pdo->query('SELECT * FROM expenses');
 
-                return $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $expenses = [];
+                foreach($rows as $row){
+                    $expenses[]=
+                            [
+                                'id' =>      $row['id'],
+                                'title' =>$row['title'],
+                                'amount' => $row['amount'],
+                                'category' => $row['category'],
+                                'user' => 
+                                [
+                                    'id'=>$row['user_id'],
+                                    'name' => $row['user_name'],
+                                ]
+                                
+                            ];               
+                }
+                    return $expenses;
+                // return $stmt->fetchAll(PDO::FETCH_ASSOC);
             },
         ],
-        'user'=>[
-            'type'=>$userType,
-            'resolve'=>function($rootValue, array $args){
-                
-            }
-        ]
     ],
 ]);
 

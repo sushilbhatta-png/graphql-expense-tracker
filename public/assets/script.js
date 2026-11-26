@@ -29,6 +29,10 @@ async function fetchExpenses(category) {
                         title
                         amount
                         category
+                        user{
+                        id
+                        name
+                        }
                     }
                 }
             `,
@@ -96,6 +100,7 @@ async function fetchExpenses(category) {
     }
 
     const resData = await response.json();
+    // console.log(resData)
 
     if (resData.errors) {
         throw new Error(resData.errors[0].message);
